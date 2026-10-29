@@ -1,0 +1,72 @@
+name: W-Bot07
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */5 * * *'
+
+concurrency:
+  group: w-bot07
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      - name: Wait 25 seconds
+        run: sleep 25
+
+      - name: Restore session
+        run: |
+          git clone --branch session --single-branch \
+            https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
+            session_bot || mkdir -p session_bot
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run bot
+        timeout-minutes: 335
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          git config --global user.email "bot@example.com"
+          git config --global user.name "WhatsApp Bot"
+          (while true; do
+            sleep 240
+            if [ -f session_bot/creds.json ]; then
+              cd session_bot
+              git add .
+              git commit -m "auto-save session" || true
+              git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+              git push origin HEAD:session --force || true
+              cd ..
+            fi
+          done) &
+          node index.js
+
+      - name: Save session (always)
+        if: always()
+        run: |
+          if [ -f session_bot/creds.json ]; then
+            cd session_bot
+            git add .
+            git commit -m "final session save" || true
+            git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+            git push origin HEAD:session --force || true
+          fi
